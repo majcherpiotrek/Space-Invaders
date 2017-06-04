@@ -12,6 +12,7 @@
 #include "Enemy_big_slow.h"
 #include "BigBullet.h"
 #include "Enemy_small_fast.h"
+#include "Shield.h"
 
 static const std::chrono::milliseconds frame_durtion(40); // 40 FPS
 static const std::chrono::milliseconds t_between_big_enemies(12000); // new big enemy every 8 seconds
@@ -28,6 +29,9 @@ static std::atomic_bool game_over(false);
 static std::default_random_engine generator;
 static std::uniform_int_distribution<int> distribution(1,100);
 static auto dice = std::bind ( distribution, generator );
+static int POINTS = 0;
+static int BIG_SHIPS_DESTROYED = 0;
+static int SMALL_SHIPS_DESTROYED = 0;
 
 /// Bullets' vector
 static std::vector<BigBullet*> big_bullets_vector;
@@ -37,6 +41,9 @@ static std::vector<SmallBullet*> player_bullets_vector;
 /// Enemies's vector
 static std::vector<Enemy_big_slow*> big_slow_enemies_vector;
 static std::vector<Enemy_small_fast*> small_fast_enemies_vector;
+
+/// Shield
+static Shield* shield;
 
 /// Mutexes
 static std::mutex player_bullets_mutex;
@@ -59,6 +66,7 @@ void draw_bullets();
 void shoot_small_bullets();
 void player_shoots(Game_actor &player);
 void draw_enemies();
+void draw_health(Player &player);
 /// Big enemies functions
 void move_big_slow_enemies();
 void create_big_slow_enemies_bullets();
@@ -80,6 +88,9 @@ void create_small_enemy();
  * @param player a reference to player object
  */
 void refresh_view(Player &player) {
+
+    int row = getmaxy( stdscr )/2 - 2;
+    int col = getmaxx( stdscr) / 2 - 8;
 
     /// Launch big enemies creation thread
     std::thread big_enemies_creation_thread(create_big_enemy);
@@ -107,14 +118,13 @@ void refresh_view(Player &player) {
 
     while (!exit_condition) {
         clear();
-
         attron( A_BOLD );
+        shield->drawActor();
         player_mutex.lock();
         ncurses_mutex.lock();
         player.drawActor();
         ncurses_mutex.unlock();
         player_mutex.unlock();
-
         draw_enemies();
         attroff( A_BOLD );
 
@@ -122,48 +132,53 @@ void refresh_view(Player &player) {
         handle_bullet_hits(player);
         remove_destroyed_enemies();
 
-        mvprintw(0,0, "small bullets: %d", small_bullets_vector.size());
-        mvprintw(1,0, "big bullets: %d", big_bullets_vector.size());
-        mvprintw(2,0, "big enemies: %d", big_slow_enemies_vector.size());
-        mvprintw(3,0, "Player's hit points: %d", player.getHit_points());
+        draw_health(player);
+        mvprintw(1,0, "Bombers destroyed: %d", BIG_SHIPS_DESTROYED);
+        mvprintw(2,0, "Small fighters destroyed: %d", SMALL_SHIPS_DESTROYED);
+        mvprintw(3,0, "TOTAL SCORE: %d", POINTS);
         draw_bullets();
 
         refresh();
 
         if (game_over) {
+            clear();
             exit_condition = true;
             attron( A_BOLD );
             attron( COLOR_PAIR(MODE_RED));
-            mvprintw( getmaxy( stdscr )/2, getmaxx( stdscr) / 2 - 5, "GAME OVER!");
+            mvprintw( row, col, "GAME OVER!");
+            mvprintw(row + 1, col, "Bombers destroyed: %d", BIG_SHIPS_DESTROYED);
+            mvprintw(row + 2, col, "Small fighters destroyed: %d", SMALL_SHIPS_DESTROYED);
+            mvprintw(row + 3, col, "TOTAL SCORE: %d", POINTS);
             attroff( COLOR_PAIR(MODE_RED));
             attroff( A_BOLD );
             refresh();
-            getch();
             break;
+        } else {
+            std::this_thread::sleep_for(frame_durtion);
         }
-        std::this_thread::sleep_for(frame_durtion);
     }
+    refresh();
     game_over = true;
-    clear();
-    mvprintw( 0, 0, "Finishing threads...");
+    mvprintw(row + 4, col, "Finishing threads...");
     refresh();
     big_enemies_creation_thread.join();
-    mvprintw( 1, 0, "- big enemies creation thread: FINISHED");
+    mvprintw(row + 5, col, "- big enemies creation thread: FINISHED");
     small_enemies_creation_thread.join();
-    mvprintw( 2, 0, "- small enemies creation thread: FINISHED");
+    mvprintw(row + 6, col, "- small enemies creation thread: FINISHED");
     move_big_slow_enemies_thread.join();
-    mvprintw( 3, 0, "- big enemies motion thread: FINISHED");
+    mvprintw(row + 7, col, "- big enemies motion thread: FINISHED");
     move_small_fast_enemies_thread.join();
-    mvprintw( 4, 0, "- small enemies motion thread: FINISHED");
+    mvprintw(row + 8, col, "- small enemies motion thread: FINISHED");
     big_slow_enemies_shooting_thread.join();
-    mvprintw( 5, 0, "- big enemies shooting thread: FINISHED");
+    mvprintw(row + 9, col, "- big enemies shooting thread: FINISHED");
     small_fast_enemies_shooting_thread.join();
-    mvprintw( 6, 0, "- small enemies shooting thread: FINISHED");
+    mvprintw(row + 10, col, "- small enemies shooting thread: FINISHED");
     big_bullets_thread.join();
-    mvprintw( 7, 0, "- big bullets motion thread: FINISHED");
+    mvprintw(row + 11, col, "- big bullets motion thread: FINISHED");
     small_bullets_thread.join();
-    mvprintw( 8, 0, "- small bullets motion thread: FINISHED");
-    mvprintw( 9, 0, "Finished all tasks!");
+    mvprintw(row + 12, col, "- small bullets motion thread: FINISHED");
+    mvprintw(row + 13, col, "Finished all tasks!");
+    mvprintw(row + 14, col, "Press 'q' to quit...");
     refresh();
 }
 //////////////////////////////////////////////
@@ -190,6 +205,11 @@ bool isHit(Game_actor* bullet, Game_actor* actor) {
 void handle_bullet_hits(Player &player) {
     small_bullets_mutex.lock();
     for (SmallBullet* bullet : small_bullets_vector) {
+        if (!shield->isDone() && isHit(bullet, shield)) {
+            bullet->setDone();
+            shield->setDamage(1);
+            continue;
+        }
         if (isHit(bullet, &player)) {
             bullet->setDone();
             player.setDamage(1);
@@ -199,6 +219,11 @@ void handle_bullet_hits(Player &player) {
 
     big_bullets_mutex.lock();
     for (BigBullet* bullet : big_bullets_vector) {
+        if (!shield->isDone() && isHit(bullet, shield)) {
+            bullet->setDone();
+            shield->setDamage(5);
+            continue;
+        }
         if (isHit(bullet, &player)) {
             bullet->setDone();
             player.setDamage(5);
@@ -208,11 +233,20 @@ void handle_bullet_hits(Player &player) {
 
     player_bullets_mutex.lock();
     for (SmallBullet* bullet : player_bullets_vector) {
+        if (!shield->isDone() && isHit(bullet, shield)) {
+            bullet->setDone();
+            shield->setDamage(1);
+            continue;
+        }
         big_enemies_mutex.lock();
         for (Enemy_big_slow* enemy : big_slow_enemies_vector) {
             if (isHit(bullet, enemy)) {
                 bullet->setDone();
                 enemy->setDamage(1);
+                if (enemy->isDone()){
+                    BIG_SHIPS_DESTROYED++;
+                }
+                POINTS++;
             }
         }
         big_enemies_mutex.unlock();
@@ -221,6 +255,8 @@ void handle_bullet_hits(Player &player) {
             if (isHit(bullet, enemy)) {
                 bullet->setDone();
                 enemy->setDamage(1);
+                SMALL_SHIPS_DESTROYED++;
+                POINTS++;
             }
         }
         small_enemies_mutex.unlock();
@@ -315,13 +351,13 @@ void draw_bullets() {
         if (!bullet->isDone()) {
             attron( A_BOLD );
             if ( has_colors() ) {
-                attron( COLOR_PAIR(MODE_GREEN));
+                attron( COLOR_PAIR(MODE_RED));
             }
             ncurses_mutex.lock();
             bullet->drawActor();
             ncurses_mutex.unlock();
             if ( has_colors() ) {
-                attroff( COLOR_PAIR(MODE_GREEN));
+                attroff( COLOR_PAIR(MODE_RED));
             }
             attroff( A_BOLD );
         }
@@ -424,6 +460,25 @@ void draw_enemies() {
     small_enemies_mutex.unlock();
 };
 
+void draw_health(Player &player) {
+    int hp = player.getHit_points();
+    int offset = 9;
+    mvprintw(0,0, "HEALTH: [");
+    if (has_colors()) {
+        attron( COLOR_PAIR(MODE_GREEN));
+    }
+    for (int i = 0; i < 10 ; ++i) {
+        if ( hp == 0 || i > hp / 10 ) {
+            mvprintw(0, i+offset, " ");
+        } else {
+            mvprintw(0, i+offset, "#");
+        }
+    }
+    if (has_colors()) {
+        attroff( COLOR_PAIR(MODE_GREEN));
+    }
+    mvprintw(0,10+offset, "]");
+}
 /// Big enemies functions
 /**
  * Changes the coordinates of the big slow enemies.
@@ -439,10 +494,17 @@ void move_big_slow_enemies() {
             if ( dice() > 99) {
                 enemy->move_direction = enemy->move_direction == RIGHT ? LEFT : RIGHT;
                 enemy->move(0, 1);
+                if (isHit(enemy,shield)) {
+                    enemy->move(0, -1);
+                }
             }
             if (enemy->move_direction == RIGHT) {
                 if (enemy->getPos_x() + enemy->getWidth() < enemy->getMax_x()) {
                     enemy->move(1, 0);
+                    if (isHit(enemy,shield)) {
+                        enemy->move_direction = enemy->move_direction == RIGHT ? LEFT : RIGHT;
+                        enemy->move(-2, 0);
+                    }
                 } else {
                     enemy->move(0, 1);
                     enemy->move_direction = LEFT;
@@ -455,6 +517,10 @@ void move_big_slow_enemies() {
             if (enemy->move_direction == LEFT) {
                 if (enemy->getPos_x() > enemy->getMin_x()) {
                     enemy->move(-1, 0);
+                    if (isHit(enemy,shield)) {
+                        enemy->move_direction = enemy->move_direction == RIGHT ? LEFT : RIGHT;
+                        enemy->move(2, 0);
+                    }
                 } else {
                     enemy->move(0, 1);
                     enemy->move_direction = RIGHT;
@@ -529,7 +595,6 @@ void create_big_enemy() {
         std::this_thread::sleep_for(t_between_big_enemies);
     }
 }
-//////////////////////////////////////////////////////////
 
 /// Small enemies functions
 /**
@@ -587,29 +652,40 @@ void move_small_fast_enemies() {
             if ( dice() > 95) {
                 enemy->move_direction = enemy->move_direction == RIGHT ? LEFT : RIGHT;
                 enemy->move(0, 1);
+                if (isHit(enemy,shield)) {
+                    enemy->move(0, -1);
+                }
             }
             if (enemy->move_direction == RIGHT) {
                 if (enemy->getPos_x() + enemy->getWidth() < enemy->getMax_x()) {
                     enemy->move(1, 0);
+                    if (isHit(enemy,shield)) {
+                        enemy->move_direction = enemy->move_direction == RIGHT ? LEFT : RIGHT;
+                        enemy->move(-2, 0);
+                    }
                 } else {
                     enemy->move(0, 1);
                     enemy->move_direction = LEFT;
                 }
-//                if (enemy->getPos_y() + enemy->getHeight() == enemy->getMax_y()) {
-//                    game_over = true;
-//                }
+                if (enemy->getPos_y() + enemy->getHeight() == enemy->getMax_y()) {
+                    game_over = true;
+                }
                 continue;
             }
             if (enemy->move_direction == LEFT) {
                 if (enemy->getPos_x() > enemy->getMin_x()) {
                     enemy->move(-1, 0);
+                    if (isHit(enemy,shield)) {
+                        enemy->move_direction = enemy->move_direction == RIGHT ? LEFT : RIGHT;
+                        enemy->move(2, 0);
+                    }
                 } else {
                     enemy->move(0, 1);
                     enemy->move_direction = RIGHT;
                 }
-//                if (enemy->getPos_y() + enemy->getHeight() == enemy->getMax_y()) {
-//                    game_over = true;
-//                }
+                if (enemy->getPos_y() + enemy->getHeight() == enemy->getMax_y()) {
+                    game_over = true;
+                }
                 continue;
             }
         }
@@ -632,12 +708,12 @@ int main() {
         init_pair( MODE_GREEN, COLOR_GREEN, COLOR_BLACK );
         init_pair( MODE_RED, COLOR_RED, COLOR_BLACK );
     }
-    /// Create player and enemies
+    /// Create player and shield
     int stdscr_maxx = getmaxx( stdscr );
     int stdscr_maxy = getmaxy( stdscr );
 
     Player* player = new Player(stdscr_maxx/2 - 3, stdscr_maxy - 1, 0, stdscr_maxx, 0, stdscr_maxy);
-
+    shield = new Shield(stdscr_maxx/2 - 10, stdscr_maxy - 7, stdscr_maxx, 0, stdscr_maxy, 0);
     /// Launch view refresh thread
     std::thread refresh_thread( refresh_view, std::ref(*player));
 
@@ -667,10 +743,7 @@ int main() {
         }
 
     }
-
     refresh_thread.join();
-    printw("\n\nExited all - Press any key to close the program!\n");
-    getch();
     endwin();
     return 0;
 }
