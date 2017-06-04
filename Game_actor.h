@@ -17,6 +17,8 @@ protected:
     int width;
     int height;
     bool done;
+    int hit_points;
+
 public:
     Direction move_direction = RIGHT;
 
@@ -44,6 +46,10 @@ public:
 
     void setDone() { done = true; }
     bool isDone() { return  done; }
+
+    int getHit_points() const;
+
+    void setDamage(int hp);
 };
 
 #endif //SPACE_INVADERS_GAME_ACTOR_H

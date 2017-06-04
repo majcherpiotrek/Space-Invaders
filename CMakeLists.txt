@@ -5,6 +5,6 @@ include_directories(${CURSES_INCLUDE_DIR})
 SET(CMAKE_CXX_FLAGS "-std=c++14 -pthread")
 set(CMAKE_CXX_STANDARD 14)
 
-set(SOURCE_FILES main.cpp SmallBullet.cpp SmallBullet.h Player.cpp Player.h Direction.h Enemy_big_slow.cpp Enemy_big_slow.h Game_actor.h Game_actor.cpp BigBullet.cpp BigBullet.h Enemy_small_fast.cpp Enemy_small_fast.h)
+set(SOURCE_FILES main.cpp SmallBullet.cpp SmallBullet.h Player.cpp Player.h Direction.h Enemy_big_slow.cpp Enemy_big_slow.h Game_actor.h Game_actor.cpp BigBullet.cpp BigBullet.h Enemy_small_fast.cpp Enemy_small_fast.h Shield.cpp Shield.h)
 add_executable(Space_Invaders ${SOURCE_FILES})
 target_link_libraries(Space_Invaders ${CURSES_LIBRARIES})

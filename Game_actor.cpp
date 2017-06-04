@@ -87,4 +87,16 @@ int Game_actor::getPos_y() const {
     return pos_y;
 }
 
+int Game_actor::getHit_points() const {
+    return hit_points;
+}
+
+void Game_actor::setDamage(int hp) {
+    hit_points -= hp;
+    if (hit_points <= 0) {
+        done = true;
+        hit_points = 0;
+    }
+}
+
 

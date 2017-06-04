@@ -6,6 +6,7 @@
 
 Enemy_big_slow::Enemy_big_slow(int _pos_x, int _pos_y, int _min_x, int _max_x, int _min_y, int _max_y)
     : Game_actor(_pos_x, _pos_y, 9, 3, _min_x, _max_x, _min_y, _max_y){
+    hit_points = 10;
 }
 
 /**
