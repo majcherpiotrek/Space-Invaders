@@ -130,6 +130,9 @@ void refresh_view(Player &player) {
 
         remove_used_bullets();
         handle_bullet_hits(player);
+        if (player.isDone()) {
+            game_over = true;
+        }
         remove_destroyed_enemies();
 
         draw_health(player);
