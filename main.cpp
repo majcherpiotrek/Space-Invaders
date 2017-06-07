@@ -715,6 +715,29 @@ int main() {
     int stdscr_maxx = getmaxx( stdscr );
     int stdscr_maxy = getmaxy( stdscr );
 
+    while (true) {
+        if (has_colors()) attron( COLOR_PAIR(MODE_RED));
+        attron(A_BOLD);
+        mvprintw(stdscr_maxy/2-4, stdscr_maxx/2 -7, "SPACE INVADERS");
+        attroff(A_BOLD);
+        if (has_colors()) attroff( COLOR_PAIR(MODE_RED));
+        mvprintw(stdscr_maxy/2-1, stdscr_maxx/2 -14, "* Move your ship left with 'a' and right with 'd'");
+        mvprintw(stdscr_maxy/2, stdscr_maxx/2 -14, "* Shoot with space");
+        mvprintw(stdscr_maxy/2+1, stdscr_maxx/2 -14, "The game finishes when your health goes down to 0,");
+        mvprintw(stdscr_maxy/2+2, stdscr_maxx/2-14, "or one of the invader's ships reaches the Earth!");
+        mvprintw(stdscr_maxy/2+3, stdscr_maxx/2 -14, "Press 'q to quit, any other key to start!");
+        mvprintw(stdscr_maxy/2+4, stdscr_maxx/2-14, "Good luck! ;)");
+        int c = getch();
+        if(c != ERR) {
+            if (c == 'q') {
+                clear();
+                refresh();
+                return 0;
+            }
+            break;
+        }
+    }
+
     Player* player = new Player(stdscr_maxx/2 - 3, stdscr_maxy - 1, 0, stdscr_maxx, 0, stdscr_maxy);
     shield = new Shield(stdscr_maxx/2 - 10, stdscr_maxy - 7, stdscr_maxx, 0, stdscr_maxy, 0);
     /// Launch view refresh thread
